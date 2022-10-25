@@ -1,20 +1,14 @@
 {
-  "env": {
-    "amd": true,
-    "node": true,
-    "es2021": true
-  },
-  "extends": "eslint:recommended",
-  "parserOptions": {
-    "ecmaVersion": "latest",
-    "sourceType": "commonjs"
-  },
-  "rules": {
-    "no-unused-vars": [
-      "error", { 
-        "argsIgnorePattern": "_",
-        "varsIgnorePattern": "_"
-      }
-    ]
-  }
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint"
+  ],
+  "ignorePatterns": [
+    "**/*.js"
+  ],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ]
 }

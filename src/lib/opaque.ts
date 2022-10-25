@@ -88,10 +88,9 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
       throw new Error("client_authenticated_2 false");
     }
 
-    const Pu = util.sodiumAeadDecrypt(rw, c.Pu);
     const Ps = util.sodiumAeadDecrypt(rw, c.Ps);
     const Xs = await get("Xs");
-    const K = util.KE(pu, xu, Ps, Xs, Xu);
+    const K = util.KE(pu, xu, Ps, Xs);
     const SK = util.oprfF(K, util.sodiumFromByte(0));
     const As = util.oprfF(K, util.sodiumFromByte(1));
     const Au = util.oprfF(K, util.sodiumFromByte(2));
@@ -135,7 +134,7 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     const Xs = sodium.crypto_scalarmult_ristretto255_base(xs);
 
     const Xu = await get("Xu");
-    const K = util.KE(pepper.ps, xs, pepper.Pu, Xu, Xs);
+    const K = util.KE(pepper.ps, xs, pepper.Pu, Xu);
     const SK = util.oprfF(K, util.sodiumFromByte(0));
     const As = util.oprfF(K, util.sodiumFromByte(1));
     const Au = util.oprfF(K, util.sodiumFromByte(2));

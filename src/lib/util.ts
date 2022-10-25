@@ -8,7 +8,7 @@ interface Utils {
   oprfH: (x: Uint8Array, m: Uint8Array) => Uint8Array;
   oprfH1: (x: Uint8Array) => IMaskedData;
   oprfRaise: (x: Uint8Array, y: Uint8Array) => Uint8Array;
-  KE: (p: Uint8Array, x: Uint8Array, P: Uint8Array, X: Uint8Array, X1: Uint8Array) => Uint8Array;
+  KE: (p: Uint8Array, x: Uint8Array, P: Uint8Array, X: Uint8Array) => Uint8Array;
   iteratedHash: (x: Uint8Array, t?: number) => Uint8Array;
   sodiumFromByte: (n: number) => Uint8Array;
   sodiumAeadEncrypt: (key: Uint8Array, plaintext: string | Uint8Array) => Ciphertext;
@@ -19,14 +19,14 @@ type IMaskedData = ReturnType<OPRF["maskPoint"]>;
 
 export = (sodium: typeof Sodium, oprf: OPRF) => {
   const sodiumAeadEncrypt: Utils["sodiumAeadEncrypt"] = (key, plaintext) => {
-    let raw_ciphertext = sodium.crypto_aead_chacha20poly1305_encrypt(
+    const raw_ciphertext = sodium.crypto_aead_chacha20poly1305_encrypt(
       plaintext,
       null,
       null,
       new Uint8Array(8),
       key
     );
-    let mac_tag = sodium.crypto_auth_hmacsha512(raw_ciphertext, key);
+    const mac_tag = sodium.crypto_auth_hmacsha512(raw_ciphertext, key);
     return { mac_tag, body: raw_ciphertext };
   };
 
@@ -81,7 +81,7 @@ export = (sodium: typeof Sodium, oprf: OPRF) => {
     return new Uint8Array(32).fill(n);
   };
 
-  const KE: Utils["KE"] = (p, x, P, X, X1) => {
+  const KE: Utils["KE"] = (p, x, P, X) => {
     const kx = oprf.scalarMult(X, x);
     const kp = oprf.scalarMult(P, p);
     const k = genericHash(sodium.crypto_core_ristretto255_add(kx, kp));

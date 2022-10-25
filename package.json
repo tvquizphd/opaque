@@ -6,9 +6,9 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.prod.json && cp -r src/types dist/types",
-    "coveralls": "npm test && ./node_modules/coveralls/bin/coveralls.js < coverage/lcov.info",
     "test": "jest --coverage",
-    "lint": "eslint lib"
+    "lint": "eslint src",
+    "coveralls": "npm test && ./node_modules/coveralls/bin/coveralls.js < coverage/lcov.info"
   },
   "repository": {
     "type": "git",
