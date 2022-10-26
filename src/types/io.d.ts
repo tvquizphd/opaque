@@ -10,53 +10,20 @@ type KeyPepper = "ks" | "ps" | "Ps" | "Pu"
 export type Pepper = ByteArrayLeaf<KeyPepper> & C
 export type Ciphertext = ByteArrayLeaf<ValC>
 
-export interface ClientRegData {
-  register: ByteArrayLeaf<"pw"> & {
-    sid: string
-  }
+export type Mailbox = Record<string, unknown>
+export type Listeners = Record<string, (v: unknown) => void>
+type IOMap = {
+  registered: boolean;
+  authenticated: boolean;
+  client_authenticated: boolean;
+  register: ByteArrayLeaf<"pw"> & Record<"sid", string>;
+  server_auth_data: ByteArrayLeaf<"beta" | "Xs" | "As"> & C;
+  client_auth_data: ByteArrayLeaf<"alpha" | "Xu">;
+  client_auth_result: ByteArrayLeaf<"Au">;
 }
-export interface ServerRegData {
-  registered: boolean
-}
-export interface ServerAuthStatus {
-  authenticated: boolean
-}
-export interface ServerAuthData {
-  server_auth_data: ByteArrayLeaf<"beta" | "Xs" | "As"> & C
-}
-export interface ClientAuthStatus {
-  client_authenticated: boolean
-}
-export interface ClientAuthData {
-  client_auth_data: ByteArrayLeaf<"alpha" | "Xu">
-}
-export interface ClientAuthResult {
-  client_auth_result: ByteArrayLeaf<"Au">
-}
-export interface Get {
-  (op_id: OpId, k: "register"): Promise<ClientRegData>
-  (op_id: OpId, k: "registered"): Promise<ServerRegData>
-  (op_id: OpId, k: "authenticated"): Promise<ServerAuthStatus>
-  (op_id: OpId, k: "server_auth_data"): Promise<ServerAuthData>
-  (op_id: OpId, k: "client_authenticated"): Promise<ClientAuthStatus>
-  (op_id: OpId, k: "client_auth_data"): Promise<ClientAuthData>
-  (op_id: OpId, k: "client_auth_result"): Promise<ClientAuthResult>
-}
-export interface Give {
-  (op_id: OpId, k: "register", v: ClientRegData): void;
-  (op_id: OpId, k: "registered", v: ServerRegData): void;
-  (op_id: OpId, k: "authenticated", v: ServerAuthStatus): void;
-  (op_id: OpId, k: "server_auth_data", v: ServerAuthData): void;
-  (op_id: OpId, k: "client_authenticated", v: ClientAuthStatus): void;
-  (op_id: OpId, k: "client_auth_data", v: ClientAuthData): void;
-  (op_id: OpId, k: "client_auth_result", v: ClientAuthResult): void;
-}
-export type IOData = (
-  ClientRegData |  ServerRegData |
-  ServerAuthStatus | ServerAuthData |
-  ClientAuthStatus | ClientAuthData | ClientAuthResult
-)
+export type IOData = Partial<IOMap>;
+export type OpId = string | undefined;
 export interface IO {
-  give: Give;
-  get: Get;
+  give: (op_id: OpId, k: string, v: unknown) => void;
+  get: (op_id: OpId, k: string) => Promise<unknown>;
 }

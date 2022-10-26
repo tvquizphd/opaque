@@ -1,21 +1,72 @@
-import type { IO, IOData } from "../types/io";
+import type { IO, IOMap, OpId } from "../types/io";
 import type { Opaque } from "../types/local";
 import type * as Sodium from "libsodium-wrappers-sumo";
 import type OPRF from "oprf";
 import utilFactory from "./util";
 
+type Tag = keyof IOMap;
+type Pair = [Tag, Partial<IOMap>];
+type ForKey<T extends Tag> = Pick<IOMap, T>;
+type KeyPair<T extends Tag> = [T, ForKey<T>];
+type GetKey<T extends Tag> = Promise<ForKey<T>>;
+
+const TAGS: Tag[] = [
+  "registered", "authenticated", "client_authenticated",
+  "register", "server_auth_data", "client_auth_data",
+  "client_auth_result"
+]
+
+function isTag(s: string | undefined): s is Tag {
+  return (TAGS as string[]).includes(s || "");
+}
+function isIOValue(v: unknown): v is Partial<IOMap> {
+  if (typeof v !== 'object' || !v) {
+    return false; 
+  }
+  const keys = Object.keys(v).map(s => `${s}`);
+  return keys.length === 1 && keys.every(isTag);
+} 
+
+function is(k: Tag, p: Pair): p is KeyPair<typeof k> {
+  return p[0] in p[1] && p[0] === k;
+}
+
 export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
   const util = utilFactory(sodium, oprf);
 
+  function giver(op_id: OpId, v: unknown): void {
+    if (!isIOValue(v)) {
+      return;
+    }
+    const k = Object.keys(v)[0];
+    if (!isTag(k)) {
+      return;
+    }
+    const p: Pair = [k, v];
+    for (const tag of TAGS) {
+      if (is(tag, p)) {
+        return io.give(op_id, tag, v);
+      }
+    }
+  }
+  async function getter (op_id: OpId, k: Partial<Tag>): GetKey<typeof k>;
+  async function getter (op_id: OpId, k: string): Promise<unknown> {
+    const v = await io.get(op_id, k);
+    if (isIOValue(v) && k in v && isTag(k)) {
+      const p: Pair = [k, v];
+      for (const tag of TAGS) {
+        if (is(tag, p)) return v;
+      }
+    }
+    throw new Error("Invalid value received!");
+  }
   // Sign up as a new user
   const clientRegister: Opaque["clientRegister"] = async (password, user_id, op_id) => {
     op_id = op_id + ":pake_init";
-    const give = (v: IOData) => {
-      if ("register" in v) io.give(op_id, "register", v);
-    }
+    const give = (v: unknown) => giver(op_id, v);
     const get_registered = async () => {
       const k = "registered";
-      return (await io.get(op_id, k))[k];
+      return (await getter(op_id, k))[k];
     }
     const pw = util.oprfKdf(password);
     const register = {sid: user_id, pw };
@@ -27,12 +78,10 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
   // Register a new user for the first time
   const serverRegister: Opaque["serverRegister"] = async (t, op_id) => {
     op_id = op_id + ":pake_init";
-    const give = (v: IOData) => {
-      if ("registered" in v) io.give(op_id, "registered", v);
-    }
+    const give = (v: unknown) => giver(op_id, v);
     const get_register = async () => {
       const k = "register";
-      return (await io.get(op_id, k))[k];
+      return (await getter(op_id, k))[k];
     }
 
     const { sid, pw } = await get_register();
@@ -59,18 +108,14 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
   // Try to log in
   const clientAuthenticate: Opaque["clientAuthenticate"] = async (password, user_id, t, op_id) => {
     op_id = op_id + ":pake";
-    const give = (v: IOData) => {
-      if ("client_authenticated" in v) io.give(op_id, "client_authenticated", v);
-      else if ("client_auth_data" in v) io.give(op_id, "client_auth_data", v);
-      else if ("client_auth_result" in v) io.give(op_id, "client_auth_result", v);
-    }
+    const give = (v: unknown) => giver(op_id, v);
     const get_authenticated = async () => {
       const k = "authenticated";
-      return (await io.get(op_id, k))[k];
+      return (await getter(op_id, k))[k];
     }
     const get_server_auth_data = async () => {
       const k = "server_auth_data";
-      return (await io.get(op_id, k))[k];
+      return (await getter(op_id, k))[k];
     }
 
     const r = sodium.crypto_core_ristretto255_scalar_random();
@@ -134,17 +179,14 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
   // Authenticate a user
   const serverAuthenticate: Opaque["serverAuthenticate"] = async (user_id, pepper, op_id) => {
     op_id = op_id + ":pake";
-    const give = (v: IOData) => {
-      if ("authenticated" in v) io.give(op_id, "authenticated", v);
-      else if ("server_auth_data" in v) io.give(op_id, "server_auth_data", v);
-    }
+    const give = (v: unknown) => giver(op_id, v);
     const get_client_auth_data = async () => {
       const k = "client_auth_data";
-      return (await io.get(op_id, k))[k];
+      return (await getter(op_id, k))[k];
     }
     const get_client_auth_result = async () => {
       const k = "client_auth_result";
-      return (await io.get(op_id, k))[k];
+      return (await getter(op_id, k))[k];
     }
 
     const { alpha: a, Xu } = await get_client_auth_data();
