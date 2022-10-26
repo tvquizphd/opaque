@@ -1,18 +1,17 @@
 {
-  "name": "@nthparty/opaque",
-  "version": "0.3.0",
-  "description": "TypeScript implementation of the OPAQUE asymmetric password authenticated key exchange (aPAKE) protocol",
+  "name": "opaque-low-io",
+  "version": "1.0.0",
+  "description": "Typescript OPAQUE (OPRF asymmetric PAKE) with minimal client/server io",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.prod.json && cp -r src/types dist/types",
     "test": "jest --coverage",
-    "lint": "eslint src",
-    "coveralls": "npm test && ./node_modules/coveralls/bin/coveralls.js < coverage/lcov.info"
+    "lint": "eslint src"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nthparty/opaque.git#opaque"
+    "url": "git+https://github.com/tvquizphd/opaque"
   },
   "keywords": [
     "asymmetric",
@@ -27,29 +26,31 @@
     "cryptography",
     "cryptographic-library"
   ],
-  "author": "Nth Party <info@nthparty.com>",
+  "author": "TV Quiz PhD <tvquizphd@gmail.com>",
   "contributors": [
     {
+      "name": "TV Quiz Phd",
+      "url": "https://github.com/tvquizphd"
+    },
+    {
       "name": "Wyatt Howe",
-      "email": "wyatt@nthparty.com",
       "url": "https://nthparty.com"
     },
     {
       "name": "Frederick Jansen",
-      "email": "frederick@nthparty.com",
       "url": "https://nthparty.com"
     },
     {
       "name": "Andrei Lapets",
-      "email": "andrei@nthparty.com",
       "url": "https://nthparty.com"
+    },
+    {
+      "name": "James Robinson",
+      "url": "https://github.com/AverageHelper"
     }
   ],
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/nthparty/opaque/issues"
-  },
-  "homepage": "https://github.com/nthparty/opaque#readme",
+  "homepage": "https://github.com/tvquizphd/opaque#readme",
   "dependencies": {
     "libsodium-wrappers-sumo": "0.7.8",
     "oprf": "2.0.0"
@@ -58,7 +59,6 @@
     "@types/jest": "26.0.24",
     "@types/libsodium-wrappers-sumo": "0.7.5",
     "@typescript-eslint/eslint-plugin": "5.41.0",
-    "coveralls": "3.1.0",
     "eslint": "8.24.0",
     "jest": "26.2.2",
     "ts-jest": "26.5.6",
