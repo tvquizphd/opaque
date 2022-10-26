@@ -1,3 +1,5 @@
+import type { Pepper } from "./io"
+
 export interface Opaque {
   /**
    * Sign up as a new user
@@ -28,23 +30,4 @@ export interface Opaque {
 export interface UserRecord {
   id: string;
   pepper: Pepper;
-}
-
-export interface Pepper {
-  ks: Uint8Array;
-  ps: Uint8Array;
-  Ps: Uint8Array;
-  Pu: Uint8Array;
-  c: C;
-}
-
-export interface C {
-  pu: Ciphertext;
-  Pu: Ciphertext;
-  Ps: Ciphertext;
-}
-
-export interface Ciphertext {
-  mac_tag: Uint8Array;
-  body: Uint8Array;
 }
