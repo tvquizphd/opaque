@@ -3,10 +3,10 @@
  *  In this test, a new user approaches the sever and registers an account.
  *  Then the connection is reset, and the user attempts to log in.
  */
-import type { Pepper } from '../src/types/io';
+import type { Pepper } from '../src/index';
+import { OP } from '../src/index';
 import IO from './test-io';
-import opaqueFactory from '../src/index';
-const _OPAQUE = opaqueFactory(IO);
+const _OPAQUE = OP(IO);
 
 test('end-to-end working flow', done => {
   workflow(true, done)

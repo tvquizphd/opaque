@@ -1,4 +1,4 @@
-import type { IO } from "../src/types/io"
+import type { Io } from "../src/index"
 
 type Mailbox = Record<string, unknown>
 type Listeners = Record<string, (v: unknown) => void>
@@ -7,7 +7,7 @@ type Listeners = Record<string, (v: unknown) => void>
  */
 const listeners: Listeners = {};
 const mailbox: Mailbox = {};
-const dummy_socket = (computation_id: string): IO => ({
+const dummy_socket = (computation_id: string): Io => ({
   get: (op_id, tag) => {
     return new Promise(function (resolve) {
       const _tag = computation_id + ':' + op_id + ':' + tag;
