@@ -8,7 +8,7 @@ interface Utils {
   oprfH: (x: Uint8Array, m: Uint8Array) => Uint8Array;
   oprfH1: (x: Uint8Array) => IMaskedData;
   oprfRaise: (x: Uint8Array, y: Uint8Array) => Uint8Array;
-  KE: (p: Uint8Array, x: Uint8Array, P: Uint8Array, X: Uint8Array) => Uint8Array;
+  KE: (p: Uint8Array, x: Uint8Array, P: Uint8Array, X: Uint8Array, X1: Uint8Array) => Uint8Array;
   iteratedHash: (x: Uint8Array, t?: number) => Uint8Array;
   sodiumFromByte: (n: number) => Uint8Array;
   sodiumAeadEncrypt: (key: Uint8Array, plaintext: string | Uint8Array) => Ciphertext;
@@ -81,7 +81,7 @@ export = (sodium: typeof Sodium, oprf: OPRF) => {
     return new Uint8Array(32).fill(n);
   };
 
-  const KE: Utils["KE"] = (p, x, P, X) => {
+  const KE: Utils["KE"] = (p, x, P, X, X1) => {
     const kx = oprf.scalarMult(X, x);
     const kp = oprf.scalarMult(P, p);
     const k = genericHash(sodium.crypto_core_ristretto255_add(kx, kp));
