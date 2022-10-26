@@ -1,4 +1,4 @@
-type O<K, V> = Record<K, V>
+type O<K extends string, V> = Record<K, V>
 type ByteArrayLeaf<I> = O<I, Uint8Array>
 type ByteArrayNode<I, J> = O<I, ByteArrayLeaf<J>>
 type ByteArrayRoot<I, J, K> = O<I, ByteArrayNode<J, K>>
