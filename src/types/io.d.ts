@@ -1,7 +1,7 @@
 type O<K extends string, V> = Record<K, V>
-type ByteArrayLeaf<I> = O<I, Uint8Array>
-type ByteArrayNode<I, J> = O<I, ByteArrayLeaf<J>>
-type ByteArrayRoot<I, J, K> = O<I, ByteArrayNode<J, K>>
+type ByteArrayLeaf<I extends string> = O<I, Uint8Array>
+type ByteArrayNode<I extends string, J extends string> = O<I, ByteArrayLeaf<J>>
+type ByteArrayRoot<I extends string, J extends string, K extends string> = O<I, ByteArrayNode<J, K>>
 
 type KeyC = "pu" | "Pu" | "Ps";
 type ValC = "mac_tag" | "body";
