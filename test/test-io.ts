@@ -1,18 +1,21 @@
 import type { IO, IOData, IOValue, Tag } from "../src/types/io"
 
+type Mailbox = Record<string, unknown>
+type Listeners = Record<string, (v: unknown) => void>
+
 /*
  *  Client-Server Communications
  */
-const listeners: Record<string, (val: IOValue) => void> = {};
-const mailbox: Record<string, IOValue> = {};
+const listeners: Listeners = {};
+const mailbox: Mailbox = {};
 const dummy_socket = (computation_id: string): IO => ({
   get: (op_id, tag) => {
     return new Promise(function (resolve) {
       const _tag = computation_id + ':' + op_id + ':' + tag;
-      const mail = mailbox[_tag] as IOData[typeof tag] | undefined; // TODO: Factor these assertions out
+      const mail = mailbox[_tag]
       if (!mail) {
         // console.debug('io.get', _tag, 'not ready');
-        listeners[_tag] = resolve as (val: IOValue) => void; // TODO: Factor these assertions out
+        listeners[_tag] = resolve
       } else {
         // console.debug('io.get', _tag, mail);
         resolve(mail);
@@ -20,7 +23,7 @@ const dummy_socket = (computation_id: string): IO => ({
       }
     });
   },
-  give: (op_id, tag: Tag, msg: IOValue) => {
+  give: (op_id, tag, msg) => {
     const _tag = computation_id + ':' + op_id + ':' + tag;
     // console.debug('io.give', _tag, msg);
     const listener = listeners[_tag];
