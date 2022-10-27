@@ -18,6 +18,8 @@ export interface IOData {
 export type Tag = keyof IOData;
 export type IOValue = IOData[Tag];
 
+type OpId = string | undefined;
+
 export interface IO {
   give: (op_id: OpId, k: string, v: unknown) => void;
   get: (op_id: OpId, k: string) => Promise<unknown>;
