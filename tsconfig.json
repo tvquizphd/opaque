@@ -1,10 +1,13 @@
 {
-	"extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true,
-    "baseUrl": "./test",
-    "types": ["jest"],
+    "strict": true,
+    "target": "es2020",
+    "declaration": true,
+    "isolatedModules": true,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["./src/**/*.ts", "./test/**/*.ts"],
-  "exclude": []
+  "include": [
+    "src/**/*"
+  ]
 }
