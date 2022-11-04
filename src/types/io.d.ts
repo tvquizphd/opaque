@@ -12,7 +12,7 @@ export type Ciphertext = ByteArrayLeaf<ValC>
 
 export type Mailbox = Record<string, unknown>
 export type Listeners = Record<string, (v: unknown) => void>
-type IOMap = {
+export type IOMap = {
   registered: boolean;
   authenticated: boolean;
   client_authenticated: boolean;

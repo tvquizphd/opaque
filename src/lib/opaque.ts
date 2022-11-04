@@ -16,6 +16,10 @@ const TAGS: Tag[] = [
   "client_auth_result"
 ]
 
+function isNumber(u: unknown): u is number {
+  return typeof u === "number";
+}
+
 function isTag(s: string | undefined): s is Tag {
   return (TAGS as string[]).includes(s || "");
 }
@@ -60,6 +64,109 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     }
     throw new Error("Invalid value received!");
   }
+
+  const logClientError = (i: number, user_id: string, op_id: string) => {
+    const client_error = "client_authenticated_" + i + " false";
+    console.debug(client_error + " " + user_id);
+    giver(op_id, { client_authenticated: false });
+    return client_error;
+  }
+
+  const logServerError = (message: string, op_id: string) => {
+    const error = "Authentication failed.  " + message;
+    console.debug(error);
+    giver(op_id, {authenticated: false });
+    return error;
+  }
+
+  const toNewClientAuth: Opaque["toNewClientAuth"] = (args) => {
+    const { password, user_id } = args;
+
+    const pw = util.oprfKdf(password);
+    const register = { sid: user_id, pw };
+    const r = sodium.crypto_core_ristretto255_scalar_random();
+    const xu = sodium.crypto_core_ristretto255_scalar_random();
+
+    const _H1_x_ = util.oprfH1(register.pw);
+    const H1_x = _H1_x_.point;
+    const mask = _H1_x_.mask;
+    const a = util.oprfRaise(H1_x, r);
+
+    const Xu = sodium.crypto_scalarmult_ristretto255_base(xu);
+    const client_auth_data = { alpha: a, Xu };
+
+    return { register, client_auth_data, r, xu, mask };
+  }
+
+  const toClientSecret: Opaque["toClientSecret"] = (args, t) => {
+    const { r, xu, mask, server_auth_data } = args;
+
+    const { beta: b, c, Xs, As: __As } = server_auth_data;
+
+    if (!sodium.crypto_core_ristretto255_is_valid_point(b)) {
+      return 1;
+    }
+
+    const r_inv = sodium.crypto_core_ristretto255_scalar_invert(r);
+    const rw = util.iteratedHash(util.oprfH(util.oprfRaise(b, r_inv), mask), t);
+    const pu = util.sodiumAeadDecrypt(rw, c.pu);
+
+    if (!sodium.crypto_core_ristretto255_is_valid_point(pu)) {
+      return 2;
+    }
+
+    const Ps = util.sodiumAeadDecrypt(rw, c.Ps);
+    const K = util.KE(pu, xu, Ps, Xs);
+    const SK = util.oprfF(K, util.sodiumFromByte(0));
+    const As = util.oprfF(K, util.sodiumFromByte(1));
+    const Au = util.oprfF(K, util.sodiumFromByte(2));
+    const token = sodium.to_hex(SK);
+
+    // The comparable value of 0 means equality
+    if (sodium.compare(As, __As) !== 0) {
+      return 3;
+    }
+
+    const client_auth_result = { Au };
+    return { token, client_auth_result };
+  }
+
+
+  const toServerPepper: Opaque["toServerPepper"] = ({ sid, pw }, t) => {
+    const ks = sodium.crypto_core_ristretto255_scalar_random();
+    const rw = util.iteratedHash(util.oprfF(ks, pw), t);
+    const ps = sodium.crypto_core_ristretto255_scalar_random();
+    const pu = sodium.crypto_core_ristretto255_scalar_random();
+    const Ps = sodium.crypto_scalarmult_ristretto255_base(ps);
+    const Pu = sodium.crypto_scalarmult_ristretto255_base(pu);
+    const c = {
+      pu: util.sodiumAeadEncrypt(rw, pu),
+      Pu: util.sodiumAeadEncrypt(rw, Pu),
+      Ps: util.sodiumAeadEncrypt(rw, Ps),
+    };
+    return { id: sid, pepper: { ks: ks, ps: ps, Ps: Ps, Pu: Pu, c: c } };
+  }
+
+  const toServerSecret: Opaque["toServerSecret"] = (args) => {
+    const { pepper, client_auth_data } = args;
+    const { alpha: a, Xu } = client_auth_data;
+    if (!sodium.crypto_core_ristretto255_is_valid_point(a)) {
+      return 1;
+    }
+    const xs = sodium.crypto_core_ristretto255_scalar_random();
+    const b = util.oprfRaise(a, pepper.ks);
+    const Xs = sodium.crypto_scalarmult_ristretto255_base(xs);
+
+    const K = util.KE(pepper.ps, xs, pepper.Pu, Xu);
+    const SK = util.oprfF(K, util.sodiumFromByte(0));
+    const As = util.oprfF(K, util.sodiumFromByte(1));
+    const Au = util.oprfF(K, util.sodiumFromByte(2));
+    const token = sodium.to_hex(SK);
+
+    const server_auth_data = { beta: b, Xs, c: pepper.c, As };
+    return { server_auth_data, token, Au };
+  }
+
   // Sign up as a new user
   const clientRegister: Opaque["clientRegister"] = async (password, user_id, op_id) => {
     op_id = op_id + ":pake_init";
@@ -69,7 +176,7 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
       return (await getter(op_id, k))[k];
     }
     const pw = util.oprfKdf(password);
-    const register = {sid: user_id, pw };
+    const register = { sid: user_id, pw };
     give({ register });
 
     return await get_registered();
@@ -85,22 +192,9 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     }
 
     const { sid, pw } = await get_register();
+    const user_record = toServerPepper({ sid, pw }, t);
 
-    const ks = sodium.crypto_core_ristretto255_scalar_random();
-    const rw = util.iteratedHash(util.oprfF(ks, pw), t);
-    const ps = sodium.crypto_core_ristretto255_scalar_random();
-    const pu = sodium.crypto_core_ristretto255_scalar_random();
-    const Ps = sodium.crypto_scalarmult_ristretto255_base(ps);
-    const Pu = sodium.crypto_scalarmult_ristretto255_base(pu);
-    const c = {
-      pu: util.sodiumAeadEncrypt(rw, pu),
-      Pu: util.sodiumAeadEncrypt(rw, Pu),
-      Ps: util.sodiumAeadEncrypt(rw, Ps),
-    };
-
-    const user_record = { id: sid, pepper: { ks: ks, ps: ps, Ps: Ps, Pu: Pu, c: c } };
-    const registered = true;
-    give({ registered });
+    give({ registered: true });
 
     return user_record;
   };
@@ -118,62 +212,24 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
       return (await getter(op_id, k))[k];
     }
 
-    const r = sodium.crypto_core_ristretto255_scalar_random();
-    const xu = sodium.crypto_core_ristretto255_scalar_random();
+    const { client_auth_data, mask, r, xu } = toNewClientAuth({ password, user_id }); 
 
-    const pw = util.oprfKdf(password);
-    const _H1_x_ = util.oprfH1(pw);
-    const H1_x = _H1_x_.point;
-    const mask = _H1_x_.mask;
-    const a = util.oprfRaise(H1_x, r);
-
-    const Xu = sodium.crypto_scalarmult_ristretto255_base(xu);
-    const client_auth_data = { alpha: a, Xu };
     give({ client_auth_data });
 
-    const { beta: b, c, Xs, As: __As } = await get_server_auth_data();
+    const server_auth_data = await get_server_auth_data();
 
-    if (!sodium.crypto_core_ristretto255_is_valid_point(b)) {
-      console.debug("client_authenticated_1 false " + user_id);
-      give({client_authenticated: false });
-      throw new Error("client_authenticated_1 false");
+    const secret_args = { mask, r, xu, client_auth_data, server_auth_data };
+    const client_result = toClientSecret(secret_args, t);
+
+    if (isNumber(client_result)) {
+      throw new Error(logClientError(client_result, user_id, op_id));
     }
-
-    const r_inv = sodium.crypto_core_ristretto255_scalar_invert(r);
-    const rw = util.iteratedHash(util.oprfH(util.oprfRaise(b, r_inv), mask), t);
-    const pu = util.sodiumAeadDecrypt(rw, c.pu);
-
-    if (!sodium.crypto_core_ristretto255_is_valid_point(pu)) {
-      console.debug("client_authenticated_2 false " + user_id);
-      give({client_authenticated: false });
-      throw new Error("client_authenticated_2 false");
-    }
-
-    const Ps = util.sodiumAeadDecrypt(rw, c.Ps);
-    const K = util.KE(pu, xu, Ps, Xs);
-    const SK = util.oprfF(K, util.sodiumFromByte(0));
-    const As = util.oprfF(K, util.sodiumFromByte(1));
-    const Au = util.oprfF(K, util.sodiumFromByte(2));
-
-    if (sodium.compare(As, __As) !== 0) {
-      // The comparable value of 0 means As equals __As
-      console.debug("client_authenticated_3 false " + user_id);
-      give({client_authenticated: false });
-      throw new Error("client_authenticated_3 false");
-    }
-
-    const client_auth_result = { Au };
+    const { token, client_auth_result } = client_result;
     give({ client_auth_result });
-
-    const success = await get_authenticated();
-    if (success) {
-      const token = sodium.to_hex(SK);
+    if (await get_authenticated()) {
       return token;
-    } else {
-      console.debug("client_authenticated_4 false " + user_id);
-      give({client_authenticated: false });
-      throw new Error("client_authenticated_4 false");
     }
+    throw new Error(logClientError(4, user_id, op_id));
   };
 
   // Authenticate a user
@@ -188,37 +244,22 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
       const k = "client_auth_result";
       return (await getter(op_id, k))[k];
     }
-
-    const { alpha: a, Xu } = await get_client_auth_data();
-    if (!sodium.crypto_core_ristretto255_is_valid_point(a)) {
-      console.debug("Authentication failed.  Alpha is not a group element.");
-      give({authenticated: false });
-      throw new Error("Authentication failed.  Alpha is not a group element.");
+    const client_auth_data = await get_client_auth_data();
+    const server_result = toServerSecret({ pepper, client_auth_data });
+    if (isNumber(server_result)) {
+      throw new Error(logServerError("Alpha is not a group element.", op_id));
     }
-    const xs = sodium.crypto_core_ristretto255_scalar_random();
-    const b = util.oprfRaise(a, pepper.ks);
-    const Xs = sodium.crypto_scalarmult_ristretto255_base(xs);
-
-    const K = util.KE(pepper.ps, xs, pepper.Pu, Xu);
-    const SK = util.oprfF(K, util.sodiumFromByte(0));
-    const As = util.oprfF(K, util.sodiumFromByte(1));
-    const Au = util.oprfF(K, util.sodiumFromByte(2));
-
-    const { c } = pepper;
-    const server_auth_data = { beta: b, Xs, c, As };
+    const { Au, server_auth_data, token } = server_result;
     give({ server_auth_data });
 
     const { Au: __Au } = await get_client_auth_result();
+
+    // The comparable value of 0 means equality
     if (sodium.compare(Au, __Au) === 0) {
-      // The comparable value of 0 means equality
-      give({authenticated: true });
-      const token = sodium.to_hex(SK);
+      give({ authenticated: true });
       return token;
-    } else {
-      console.debug("Authentication failed.  Wrong password for " + user_id);
-      give({authenticated: false });
-      throw new Error("Authentication failed.  Wrong password for " + user_id);
     }
+    throw new Error(logServerError("Wrong password for " + user_id, op_id));
   };
 
   return {
@@ -226,5 +267,9 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     serverRegister,
     clientAuthenticate,
     serverAuthenticate,
+    toNewClientAuth,
+    toClientSecret,
+    toServerPepper,
+    toServerSecret
   };
 };
