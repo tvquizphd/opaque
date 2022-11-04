@@ -12,11 +12,9 @@ test('end-to-end working flow', done => {
   workflow(true, done)
 })
 
-/* TOOD
 test('end-to-end wrong pass for client authenticate flow', done => {
   workflow(false, done)
 })
-*/
 
 const workflow = async (valid: boolean, done: (err?: unknown) => void): Promise<void> => {
   const OPAQUE = await _OPAQUE;
