@@ -1,6 +1,29 @@
 import type { IOMap, Pepper } from "./io"
 
-export interface Opaque {
+export interface OpaqueSync {
+  /**
+   * Client Authentication Initialization
+   */
+  toNewClientAuth: (a: NewClientAuthIn) => NewClientAuthOut;
+
+  /**
+   * Shared Secret on Client
+   */
+  toClientSecret: (a: ClientSecretIn, t?: number) => ClientSecretOut | number;
+
+  /**
+   * Server Registration Initialization
+   */
+  toServerPepper: (a: IOMap["register"], t?: number) => UserRecord;
+
+  /**
+   * Shared Secret on Server
+   */
+  toServerSecret: (a: ServerSecretIn) => ServerSecretOut | number;
+
+}
+
+export interface Opaque extends OpaqueSync {
   /**
    * Sign up as a new user
    */
@@ -25,27 +48,6 @@ export interface Opaque {
    * Authenticate a user
    */
   serverAuthenticate: (user_id: string, pepper: Pepper, op_id?: string) => Promise<string>;
-
-  /**
-   * Client Authentication Initialization
-   */
-  toNewClientAuth: (a: NewClientAuthIn) => NewClientAuthOut;
-
-  /**
-   * Shared Secret on Client
-   */
-  toClientSecret: (a: ClientSecretIn, t?: number) => ClientSecretOut | number;
-
-  /**
-   * Server Registration Initialization
-   */
-  toServerPepper: (a: IOMap["register"], t?: number) => UserRecord;
-
-  /**
-   * Shared Secret on Server
-   */
-  toServerSecret: (a: ServerSecretIn) => ServerSecretOut | number;
-
 }
 
 interface NewClientAuthIn {

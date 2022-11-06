@@ -1,5 +1,6 @@
 import type { IO, IOMap, OpId } from "../types/io";
 import type { Opaque } from "../types/local";
+import type { OpaqueSync } from "../types/local";
 import type * as Sodium from "libsodium-wrappers-sumo";
 import type OPRF from "oprf";
 import utilFactory from "./util";
@@ -35,49 +36,9 @@ function is(k: Tag, p: Pair): p is KeyPair<typeof k> {
   return p[0] in p[1] && p[0] === k;
 }
 
-export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
+const opaqueSyncFactory = (sodium: typeof Sodium, oprf: OPRF): OpaqueSync => {
+
   const util = utilFactory(sodium, oprf);
-
-  function giver(op_id: OpId, v: unknown): void {
-    if (!isIOValue(v)) {
-      return;
-    }
-    const k = Object.keys(v)[0];
-    if (!isTag(k)) {
-      return;
-    }
-    const p: Pair = [k, v];
-    for (const tag of TAGS) {
-      if (is(tag, p)) {
-        return io.give(op_id, tag, v);
-      }
-    }
-  }
-  async function getter (op_id: OpId, k: Partial<Tag>): GetKey<typeof k>;
-  async function getter (op_id: OpId, k: string): Promise<unknown> {
-    const v = await io.get(op_id, k);
-    if (isIOValue(v) && k in v && isTag(k)) {
-      const p: Pair = [k, v];
-      for (const tag of TAGS) {
-        if (is(tag, p)) return v;
-      }
-    }
-    throw new Error("Invalid value received!");
-  }
-
-  const logClientError = (i: number, user_id: string, op_id: string) => {
-    const client_error = "client_authenticated_" + i + " false";
-    console.debug(client_error + " " + user_id);
-    giver(op_id, { client_authenticated: false });
-    return client_error;
-  }
-
-  const logServerError = (message: string, op_id: string) => {
-    const error = "Authentication failed.  " + message;
-    console.debug(error);
-    giver(op_id, {authenticated: false });
-    return error;
-  }
 
   const toNewClientAuth: Opaque["toNewClientAuth"] = (args) => {
     const { password, user_id } = args;
@@ -165,6 +126,65 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
 
     const server_auth_data = { beta: b, Xs, c: pepper.c, As };
     return { server_auth_data, token, Au };
+  }
+
+  return {
+    toNewClientAuth,
+    toClientSecret,
+    toServerPepper,
+    toServerSecret
+  }
+}
+
+const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
+  const util = utilFactory(sodium, oprf);
+  const ops = opaqueSyncFactory(sodium, oprf);
+  const {
+    toNewClientAuth,
+    toClientSecret,
+    toServerPepper,
+    toServerSecret
+  } = ops;
+
+  function giver(op_id: OpId, v: unknown): void {
+    if (!isIOValue(v)) {
+      return;
+    }
+    const k = Object.keys(v)[0];
+    if (!isTag(k)) {
+      return;
+    }
+    const p: Pair = [k, v];
+    for (const tag of TAGS) {
+      if (is(tag, p)) {
+        return io.give(op_id, tag, v);
+      }
+    }
+  }
+  async function getter (op_id: OpId, k: Partial<Tag>): GetKey<typeof k>;
+  async function getter (op_id: OpId, k: string): Promise<unknown> {
+    const v = await io.get(op_id, k);
+    if (isIOValue(v) && k in v && isTag(k)) {
+      const p: Pair = [k, v];
+      for (const tag of TAGS) {
+        if (is(tag, p)) return v;
+      }
+    }
+    throw new Error("Invalid value received!");
+  }
+
+  const logClientError = (i: number, user_id: string, op_id: string) => {
+    const client_error = "client_authenticated_" + i + " false";
+    console.debug(client_error + " " + user_id);
+    giver(op_id, { client_authenticated: false });
+    return client_error;
+  }
+
+  const logServerError = (message: string, op_id: string) => {
+    const error = "Authentication failed.  " + message;
+    console.debug(error);
+    giver(op_id, {authenticated: false });
+    return error;
   }
 
   // Sign up as a new user
@@ -272,4 +292,10 @@ export = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     toServerPepper,
     toServerSecret
   };
+};
+
+
+export {
+  opaqueFactory,
+  opaqueSyncFactory
 };

@@ -1,6 +1,6 @@
 {
   "name": "opaque-low-io",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "Typescript OPAQUE (OPRF asymmetric PAKE) with minimal client/server io",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
