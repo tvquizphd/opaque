@@ -1,6 +1,7 @@
 import type { IO, IOMap, OpId } from "../types/io";
-import type { Opaque } from "../types/local";
-import type { OpaqueSync } from "../types/local";
+import type { Opaque, OpaqueSync, PromiseStep, HasToken } from "../types/local";
+import type { ClientFirst, ClientFinal, ClientStage } from "../types/local";
+import type { ServerFirst, ServerFinal, ServerStage } from "../types/local";
 import type * as Sodium from "libsodium-wrappers-sumo";
 import type OPRF from "oprf";
 import utilFactory from "./util";
@@ -33,6 +34,55 @@ function isIOValue(v: unknown): v is Partial<IOMap> {
 
 function is(k: Tag, p: Pair): p is KeyPair<typeof k> {
   return p[0] in p[1] && p[0] === k;
+}
+
+function isClientFirst(o: ClientStage): o is ClientFirst {
+  const s = o as ClientFirst;
+  return [s.user_id, s.password].every(v => typeof v === "string");
+}
+
+function isClientFinal(o: ClientStage): o is ClientFinal {
+  const s = o as ClientFinal;
+  const all_state = [s.r, s.mask, s.xu].every(v => {
+    return v?.constructor === Uint8Array;
+  });
+  if (s.client_auth_data && all_state) {
+    const {client_auth_data: cad } = s;
+    const has_sid = typeof cad.sid === "string";
+    return has_sid && [cad.pw, cad.alpha, cad.Xu].every(v => {
+      return v?.constructor === Uint8Array;
+    });
+  }
+  return false;
+}
+
+function isServerFirst(o: ServerStage): o is ServerFirst {
+  const s = o as ServerFirst;
+  if (s.pepper) {
+    const { ks, ps, Ps, Pu, c } = s.pepper;
+    if (c && c.pu && c.Pu && c.Ps) {
+      const keys = [ 
+        c.pu.mac_tag, c.Pu.mac_tag, c.Ps.mac_tag,
+        c.pu.body, c.Pu.body, c.Ps.body
+      ];
+      return [ ...keys, ks, ps, Ps, Pu ].every(v => {
+        return v.constructor === Uint8Array;
+      });
+    }
+  }
+  return false;
+}
+
+function isServerFinal(o: ServerStage): o is ServerFinal {
+  const s = o as ServerFinal;
+  if (s.Au && s.token) {
+    const needs = [
+      s.Au.constructor === Uint8Array,
+      typeof s.token === "string"
+    ];
+    return needs.every(v => v);
+  }
+  return false;
 }
 
 const opaqueSyncFactory = (sodium: typeof Sodium, oprf: OPRF): OpaqueSync => {
@@ -134,7 +184,7 @@ const opaqueSyncFactory = (sodium: typeof Sodium, oprf: OPRF): OpaqueSync => {
   }
 }
 
-const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
+const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF) => {
   const util = utilFactory(sodium, oprf);
   const ops = opaqueSyncFactory(sodium, oprf);
   const {
@@ -171,9 +221,9 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     throw new Error("Invalid value received!");
   }
 
-  const logClientError = (i: number, user_id: string) => {
+  const logClientError = (i: number) => {
     const client_error = "client_authenticated_" + i + " false";
-    console.debug(client_error + " " + user_id);
+    console.debug(client_error + " user");
     return client_error;
   }
 
@@ -203,34 +253,39 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     return toServerPepper({ sid, pw }, t);
   };
 
-  // Try to log in
-  const clientAuthenticate: Opaque["clientAuthenticate"] = async (password, user_id, t, op_id) => {
+  async function clientStep (stage: ClientFirst, t?: number, op_id?: string): Promise<ClientFinal>
+  async function clientStep (stage: ClientFinal, t?: number, op_id?: string): Promise<HasToken>
+  async function clientStep (stage: ClientStage, t?: number, op_id?: string): PromiseStep {
     op_id = op_id + ":pake";
     const give = (v: unknown) => giver(op_id, v);
     const get_server_auth_data = async () => {
       const k = "server_auth_data";
       return (await getter(op_id, k))[k];
     }
-
-    const { client_auth_data, mask, r, xu } = toNewClientAuth({ password, user_id }); 
-
-    give({ client_auth_data });
-
-    const server_auth_data = await get_server_auth_data();
-
-    const secret_args = { mask, r, xu, client_auth_data, server_auth_data };
-    const client_result = toClientSecret(secret_args, t);
-
-    if (isNumber(client_result)) {
-      throw new Error(logClientError(client_result, user_id));
+    if (isClientFirst(stage)) {
+      const client_out = toNewClientAuth(stage); 
+      const { client_auth_data } = client_out;
+      give({ client_auth_data });
+      return client_out;
     }
-    const { token, client_auth_result } = client_result;
-    give({ client_auth_result });
-    return token;
-  };
+    if (isClientFinal(stage)) {
+      const { client_auth_data, mask, r, xu } = stage;
+      const server_auth_data = await get_server_auth_data();
+      const secret_args = { mask, r, xu, client_auth_data, server_auth_data };
+      const client_result = toClientSecret(secret_args, t);
+      if (isNumber(client_result)) {
+        throw new Error(logClientError(client_result));
+      }
+      const { token, client_auth_result } = client_result;
+      give({ client_auth_result });
+      return { token };
+    }
+    throw new Error(logClientError(0));
+  }
 
-  // Authenticate a user
-  const serverAuthenticate: Opaque["serverAuthenticate"] = async (user_id, pepper, op_id) => {
+  async function serverStep(stage: ServerFirst, op_id?: string): Promise<ServerFinal>
+  async function serverStep(stage: ServerFinal, op_id?: string): Promise<HasToken>
+  async function serverStep(stage: ServerStage, op_id?: string): PromiseStep {
     op_id = op_id + ":pake";
     const give = (v: unknown) => giver(op_id, v);
     const get_client_auth_data = async () => {
@@ -241,24 +296,44 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
       const k = "client_auth_result";
       return (await getter(op_id, k))[k];
     }
-    const client_auth_data = await get_client_auth_data();
-    const server_result = toServerSecret({ pepper, client_auth_data });
-    if (isNumber(server_result)) {
-      throw new Error(logServerError("Alpha is not a group element."));
+    if (isServerFirst(stage)) {
+      const { pepper } = stage;
+      const client_auth_data = await get_client_auth_data();
+      const server_result = toServerSecret({ pepper, client_auth_data });
+      if (isNumber(server_result)) {
+        throw new Error(logServerError("Invalid client auth data."));
+      }
+      const { server_auth_data, Au, token } = server_result;
+      give({ server_auth_data });
+      return { Au, token };
     }
-    const { Au, server_auth_data, token } = server_result;
-    give({ server_auth_data });
-
-    const { Au: __Au } = await get_client_auth_result();
-
-    // The comparable value of 0 means equality
-    if (sodium.compare(Au, __Au) === 0) {
-      return token;
+    if (isServerFinal(stage)) {
+      const { Au } = await get_client_auth_result();
+      // The comparable value of 0 means equality
+      if (sodium.compare(stage.Au, Au) === 0) {
+        return { token: stage.token };
+      }
+      throw new Error(logServerError("Wrong password for user"));
     }
-    throw new Error(logServerError("Wrong password for " + user_id));
+    throw new Error(logServerError("Invalid server stage"));
+  }
+
+  // Try to log in
+  const clientAuthenticate: Opaque["clientAuthenticate"] = async (password, user_id, t, op_id) => {
+    const step = await clientStep({ password, user_id }, t, op_id);
+    return (await clientStep(step, t, op_id)).token;
+  };
+
+  // Authenticate a user
+  const serverAuthenticate: Opaque["serverAuthenticate"] = async (user_id, pepper, op_id) => {
+    console.log('Authenticating ' + user_id);
+    const step = await serverStep({ pepper }, op_id);
+    return (await serverStep(step, op_id)).token;
   };
 
   return {
+    clientStep,
+    serverStep,
     clientRegister,
     serverRegister,
     clientAuthenticate,

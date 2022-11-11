@@ -23,7 +23,26 @@ export interface OpaqueSync {
 
 }
 
+export type PromiseStep = Promise<Record<string, unknown>>;
+export type ClientFirst = { user_id: string, password: string };
+export type ServerFinal = { token: string, Au: Uint8Array };
+export type ServerFirst = { pepper: Pepper };
+export type ClientFinal = NewClientAuthOut;
+export type ClientStage = ClientFirst | ClientFinal;
+export type ServerStage = ServerFirst | ServerFinal;
+export type HasToken = { token: string };
+
 export interface Opaque extends OpaqueSync {
+
+  clientStep: {
+    (stage: ClientFirst, t?: number, op_id?: string): Promise<ClientFinal>;
+    (stage: ClientFinal, t?: number, op_id?: string): Promise<HasToken>;
+  };
+  serverStep: {
+    (stage: ServerFirst, op_id?: string): Promise<ServerFinal>;
+    (stage: ServerFinal, op_id?: string): Promise<HasToken>;
+  };
+
   /**
    * Sign up as a new user
    */
@@ -79,9 +98,7 @@ type ServerSecretIn = {
   client_auth_data: IOMap["client_auth_data"]
 }
 
-type ServerSecretOut = {
-  token: string,
-  Au: Uint8Array,
+type ServerSecretOut = ServerFinal & {
   server_auth_data: IOMap["server_auth_data"]
 }
 
