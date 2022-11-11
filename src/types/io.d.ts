@@ -12,13 +12,11 @@ export type Ciphertext = ByteArrayLeaf<ValC>
 
 export type Mailbox = Record<string, unknown>
 export type Listeners = Record<string, (v: unknown) => void>
+type register = ByteArrayLeaf<"pw"> & Record<"sid", string>
 export type IOMap = {
-  registered: boolean;
-  authenticated: boolean;
-  client_authenticated: boolean;
-  register: ByteArrayLeaf<"pw"> & Record<"sid", string>;
+  register: register;
   server_auth_data: ByteArrayLeaf<"beta" | "Xs" | "As"> & C;
-  client_auth_data: ByteArrayLeaf<"alpha" | "Xu">;
+  client_auth_data: ByteArrayLeaf<"alpha" | "Xu"> & register;
   client_auth_result: ByteArrayLeaf<"Au">;
 }
 export type IOData = Partial<IOMap>;

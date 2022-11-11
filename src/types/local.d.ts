@@ -27,7 +27,7 @@ export interface Opaque extends OpaqueSync {
   /**
    * Sign up as a new user
    */
-  clientRegister: (password: string, user_id: string, op_id?: string) => Promise<boolean>;
+  clientRegister: (password: string, user_id: string, op_id?: string) => Promise<void>;
 
   /**
    * Register a new user for the first time
@@ -62,7 +62,6 @@ type ClientState = {
 }
 
 type NewClientAuthOut = ClientState & {
-  register: IOMap["register"],
   client_auth_data: IOMap["client_auth_data"]
 }
 

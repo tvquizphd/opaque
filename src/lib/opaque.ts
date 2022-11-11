@@ -12,7 +12,6 @@ type KeyPair<T extends Tag> = [T, ForKey<T>];
 type GetKey<T extends Tag> = Promise<ForKey<T>>;
 
 const TAGS: Tag[] = [
-  "registered", "authenticated", "client_authenticated",
   "register", "server_auth_data", "client_auth_data",
   "client_auth_result"
 ]
@@ -41,22 +40,21 @@ const opaqueSyncFactory = (sodium: typeof Sodium, oprf: OPRF): OpaqueSync => {
   const util = utilFactory(sodium, oprf);
 
   const toNewClientAuth: Opaque["toNewClientAuth"] = (args) => {
-    const { password, user_id } = args;
+    const { password, user_id: sid } = args;
 
     const pw = util.oprfKdf(password);
-    const register = { sid: user_id, pw };
     const r = sodium.crypto_core_ristretto255_scalar_random();
     const xu = sodium.crypto_core_ristretto255_scalar_random();
 
-    const _H1_x_ = util.oprfH1(register.pw);
+    const _H1_x_ = util.oprfH1(pw);
     const H1_x = _H1_x_.point;
     const mask = _H1_x_.mask;
     const a = util.oprfRaise(H1_x, r);
 
     const Xu = sodium.crypto_scalarmult_ristretto255_base(xu);
-    const client_auth_data = { alpha: a, Xu };
+    const client_auth_data = { alpha: a, Xu, sid, pw };
 
-    return { register, client_auth_data, r, xu, mask };
+    return { client_auth_data, r, xu, mask };
   }
 
   const toClientSecret: Opaque["toClientSecret"] = (args, t) => {
@@ -173,60 +171,42 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     throw new Error("Invalid value received!");
   }
 
-  const logClientError = (i: number, user_id: string, op_id: string) => {
+  const logClientError = (i: number, user_id: string) => {
     const client_error = "client_authenticated_" + i + " false";
     console.debug(client_error + " " + user_id);
-    giver(op_id, { client_authenticated: false });
     return client_error;
   }
 
-  const logServerError = (message: string, op_id: string) => {
+  const logServerError = (message: string) => {
     const error = "Authentication failed.  " + message;
     console.debug(error);
-    giver(op_id, {authenticated: false });
     return error;
   }
 
   // Sign up as a new user
-  const clientRegister: Opaque["clientRegister"] = async (password, user_id, op_id) => {
+  const clientRegister: Opaque["clientRegister"] = (password, user_id, op_id) => {
     op_id = op_id + ":pake_init";
-    const give = (v: unknown) => giver(op_id, v);
-    const get_registered = async () => {
-      const k = "registered";
-      return (await getter(op_id, k))[k];
-    }
     const pw = util.oprfKdf(password);
     const register = { sid: user_id, pw };
-    give({ register });
-
-    return await get_registered();
+    giver(op_id, { register });
+    return Promise.resolve()
   };
 
   // Register a new user for the first time
   const serverRegister: Opaque["serverRegister"] = async (t, op_id) => {
     op_id = op_id + ":pake_init";
-    const give = (v: unknown) => giver(op_id, v);
     const get_register = async () => {
       const k = "register";
       return (await getter(op_id, k))[k];
     }
-
     const { sid, pw } = await get_register();
-    const user_record = toServerPepper({ sid, pw }, t);
-
-    give({ registered: true });
-
-    return user_record;
+    return toServerPepper({ sid, pw }, t);
   };
 
   // Try to log in
   const clientAuthenticate: Opaque["clientAuthenticate"] = async (password, user_id, t, op_id) => {
     op_id = op_id + ":pake";
     const give = (v: unknown) => giver(op_id, v);
-    const get_authenticated = async () => {
-      const k = "authenticated";
-      return (await getter(op_id, k))[k];
-    }
     const get_server_auth_data = async () => {
       const k = "server_auth_data";
       return (await getter(op_id, k))[k];
@@ -242,14 +222,11 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     const client_result = toClientSecret(secret_args, t);
 
     if (isNumber(client_result)) {
-      throw new Error(logClientError(client_result, user_id, op_id));
+      throw new Error(logClientError(client_result, user_id));
     }
     const { token, client_auth_result } = client_result;
     give({ client_auth_result });
-    if (await get_authenticated()) {
-      return token;
-    }
-    throw new Error(logClientError(4, user_id, op_id));
+    return token;
   };
 
   // Authenticate a user
@@ -267,7 +244,7 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
     const client_auth_data = await get_client_auth_data();
     const server_result = toServerSecret({ pepper, client_auth_data });
     if (isNumber(server_result)) {
-      throw new Error(logServerError("Alpha is not a group element.", op_id));
+      throw new Error(logServerError("Alpha is not a group element."));
     }
     const { Au, server_auth_data, token } = server_result;
     give({ server_auth_data });
@@ -276,10 +253,9 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF): Opaque => {
 
     // The comparable value of 0 means equality
     if (sodium.compare(Au, __Au) === 0) {
-      give({ authenticated: true });
       return token;
     }
-    throw new Error(logServerError("Wrong password for " + user_id, op_id));
+    throw new Error(logServerError("Wrong password for " + user_id));
   };
 
   return {
