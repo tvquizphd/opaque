@@ -80,25 +80,25 @@ type ClientState = {
   mask: Uint8Array,
 }
 
-type NewClientAuthOut = ClientState & {
+export type NewClientAuthOut = ClientState & {
   client_auth_data: IOMap["client_auth_data"]
 }
 
-type ClientSecretIn = ClientState & {
+export type ClientSecretIn = ClientState & {
   server_auth_data: IOMap["server_auth_data"]
 }
 
-type ClientSecretOut = {
+export type ClientSecretOut = {
   token: string,
   client_auth_result: IOMap["client_auth_result"]
 }
 
-type ServerSecretIn = {
+export type ServerSecretIn = {
   pepper: Pepper,
   client_auth_data: IOMap["client_auth_data"]
 }
 
-type ServerSecretOut = ServerFinal & {
+export type ServerSecretOut = ServerFinal & {
   server_auth_data: IOMap["server_auth_data"]
 }
 
