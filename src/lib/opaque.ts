@@ -194,20 +194,22 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF) => {
     toServerSecret
   } = ops;
 
-  function giver(op_id: OpId, v: unknown): void {
+  function giver(op_id: OpId, v: unknown): Promise<void> {
     if (!isIOValue(v)) {
-      return;
+      const e = new Error('Missing tag');
+      return Promise.reject(e);
     }
     const k = Object.keys(v)[0];
-    if (!isTag(k)) {
-      return;
-    }
-    const p: Pair = [k, v];
-    for (const tag of TAGS) {
-      if (is(tag, p)) {
-        return io.give(op_id, tag, v);
+    if (isTag(k)) {
+      const p: Pair = [k, v];
+      for (const tag of TAGS) {
+        if (is(tag, p)) {
+          return io.give(op_id, tag, v);
+        }
       }
     }
+    const e = new Error('Invalid tag');
+    return Promise.reject(e);
   }
   async function getter (op_id: OpId, k: Partial<Tag>): GetKey<typeof k>;
   async function getter (op_id: OpId, k: string): Promise<unknown> {
@@ -238,8 +240,7 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF) => {
     op_id = op_id + ":pake_init";
     const pw = util.oprfKdf(password);
     const register = { sid: user_id, pw };
-    giver(op_id, { register });
-    return Promise.resolve()
+    return giver(op_id, { register });
   };
 
   // Register a new user for the first time
@@ -265,7 +266,7 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF) => {
     if (isClientFirst(stage)) {
       const client_out = toNewClientAuth(stage); 
       const { client_auth_data } = client_out;
-      give({ client_auth_data });
+      await give({ client_auth_data });
       return client_out;
     }
     if (isClientFinal(stage)) {
@@ -277,7 +278,7 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF) => {
         throw new Error(logClientError(client_result));
       }
       const { token, client_auth_result } = client_result;
-      give({ client_auth_result });
+      await give({ client_auth_result });
       return { token };
     }
     throw new Error(logClientError(0));
@@ -304,7 +305,7 @@ const opaqueFactory = (io: IO, sodium: typeof Sodium, oprf: OPRF) => {
         throw new Error(logServerError("Invalid client auth data."));
       }
       const { server_auth_data, Au, token } = server_result;
-      give({ server_auth_data });
+      await give({ server_auth_data });
       return { Au, token };
     }
     if (isServerFinal(stage)) {

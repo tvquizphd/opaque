@@ -22,7 +22,7 @@ const dummy_socket = (computation_id: string): Io => ({
       }
     });
   },
-  give: (op_id, tag, msg) => {
+  give: async (op_id, tag, msg) => {
     const _tag = computation_id + ':' + op_id + ':' + tag;
     // console.debug('io.give', _tag, msg);
     const listener = listeners[_tag];

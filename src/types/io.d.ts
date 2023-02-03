@@ -22,6 +22,6 @@ export type IOMap = {
 export type IOData = Partial<IOMap>;
 export type OpId = string | undefined;
 export interface IO {
-  give: (op_id: OpId, k: string, v: unknown) => void;
+  give: (op_id: OpId, k: string, v: unknown) => Promise<void>;
   get: (op_id: OpId, k: string) => Promise<unknown>;
 }
